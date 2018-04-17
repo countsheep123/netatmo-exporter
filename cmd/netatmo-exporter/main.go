@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	netatmo "github.com/countsheep123/go-netatmo"
 	scan "github.com/mattn/go-scan"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -159,45 +160,55 @@ func (c *Collector) Collect(ch chan<- prometheus.Metric) {
 	ch <- c.up
 
 	for _, m := range metrics {
-		ch <- prometheus.MustNewConstMetric(
-			c.temperature,
-			prometheus.GaugeValue,
-			m.temperature,
-			fmt.Sprintf("%s-%s", m.stationName, m.moduleName),
-		)
-		ch <- prometheus.MustNewConstMetric(
-			c.humidity,
-			prometheus.GaugeValue,
-			float64(m.humidity),
-			fmt.Sprintf("%s-%s", m.stationName, m.moduleName),
-		)
-		ch <- prometheus.MustNewConstMetric(
-			c.co2,
-			prometheus.GaugeValue,
-			float64(m.co2),
-			fmt.Sprintf("%s-%s", m.stationName, m.moduleName),
-		)
-		ch <- prometheus.MustNewConstMetric(
-			c.noise,
-			prometheus.GaugeValue,
-			float64(m.noise),
-			fmt.Sprintf("%s-%s", m.stationName, m.moduleName),
-		)
-		ch <- prometheus.MustNewConstMetric(
-			c.pressure,
-			prometheus.GaugeValue,
-			m.pressure,
-			fmt.Sprintf("%s-%s", m.stationName, m.moduleName),
-		)
+		if m.temperature != nil {
+			ch <- prometheus.MustNewConstMetric(
+				c.temperature,
+				prometheus.GaugeValue,
+				*m.temperature,
+				fmt.Sprintf("%s-%s", m.stationName, m.moduleName),
+			)
+		}
+		if m.humidity != nil {
+			ch <- prometheus.MustNewConstMetric(
+				c.humidity,
+				prometheus.GaugeValue,
+				float64(*m.humidity),
+				fmt.Sprintf("%s-%s", m.stationName, m.moduleName),
+			)
+		}
+		if m.co2 != nil {
+			ch <- prometheus.MustNewConstMetric(
+				c.co2,
+				prometheus.GaugeValue,
+				float64(*m.co2),
+				fmt.Sprintf("%s-%s", m.stationName, m.moduleName),
+			)
+		}
+		if m.noise != nil {
+			ch <- prometheus.MustNewConstMetric(
+				c.noise,
+				prometheus.GaugeValue,
+				float64(*m.noise),
+				fmt.Sprintf("%s-%s", m.stationName, m.moduleName),
+			)
+		}
+		if m.pressure != nil {
+			ch <- prometheus.MustNewConstMetric(
+				c.pressure,
+				prometheus.GaugeValue,
+				*m.pressure,
+				fmt.Sprintf("%s-%s", m.stationName, m.moduleName),
+			)
+		}
 	}
 }
 
 type metrics struct {
-	temperature float64
-	humidity    int64
-	co2         int64
-	noise       int64
-	pressure    float64
+	temperature *float64
+	humidity    *int64
+	co2         *int64
+	noise       *int64
+	pressure    *float64
 
 	stationName string
 	moduleName  string
@@ -261,7 +272,7 @@ func getAccessToken(refreshToken, clientID, clientSecret string) (string, error)
 	return accessToken, nil
 }
 
-func getData(accessToken string) (map[string]interface{}, error) {
+func getData(accessToken string) (*netatmo.StationData, error) {
 	u, err := url.Parse("https://api.netatmo.com/api/getstationsdata")
 	if err != nil {
 		return nil, err
@@ -286,41 +297,27 @@ func getData(accessToken string) (map[string]interface{}, error) {
 		return nil, fmt.Errorf("invalid request")
 	}
 
-	var body map[string]interface{}
-	if err := json.NewDecoder(res.Body).Decode(&body); err != nil {
+	var data *netatmo.StationData
+	if err := json.NewDecoder(res.Body).Decode(&data); err != nil {
 		return nil, err
 	}
 
-	return body, nil
+	return data, nil
 }
 
-func getStationMetrics(data map[string]interface{}) ([]*metrics, error) {
-	var devices []map[string]interface{}
-	if err := scan.ScanTree(data, "/body/devices", &devices); err != nil {
-		return nil, err
-	}
+func getStationMetrics(data *netatmo.StationData) ([]*metrics, error) {
 
 	metrics := []*metrics{}
 
-	for _, device := range devices {
-		var stationName string
-		if err := scan.ScanTree(device, "/station_name", &stationName); err != nil {
-			return nil, err
-		}
-
-		m, err := getModuleMetrics(device, stationName)
+	for _, device := range data.Body.Devices {
+		m, err := getModuleMetrics(device.DashboardData, device.StationName, device.ModuleName)
 		if err != nil {
 			return nil, err
 		}
 		metrics = append(metrics, m)
 
-		var modules []map[string]interface{}
-		if err := scan.ScanTree(device, "/modules", &modules); err != nil {
-			return nil, err
-		}
-
-		for _, module := range modules {
-			m, err := getModuleMetrics(module, stationName)
+		for _, module := range device.Modules {
+			m, err := getModuleMetrics(module.DashboardData, device.StationName, module.ModuleName)
 			if err != nil {
 				return nil, err
 			}
@@ -331,28 +328,21 @@ func getStationMetrics(data map[string]interface{}) ([]*metrics, error) {
 	return metrics, nil
 }
 
-func getModuleMetrics(module map[string]interface{}, stationName string) (*metrics, error) {
+func getModuleMetrics(dashboardData *netatmo.DashboardData, stationName, moduleName *string) (*metrics, error) {
 	metrics := &metrics{
-		stationName: stationName,
+		temperature: dashboardData.Temperature,
+		humidity:    dashboardData.Humidity,
+		co2:         dashboardData.CO2,
+		noise:       dashboardData.Noise,
+		pressure:    dashboardData.Pressure,
 	}
 
-	if err := scan.ScanTree(module, "/dashboard_data/Temperature", &metrics.temperature); err != nil {
-		return nil, err
+	if stationName != nil {
+		metrics.stationName = *stationName
 	}
-	if err := scan.ScanTree(module, "/dashboard_data/Humidity", &metrics.humidity); err != nil {
-		return nil, err
-	}
-	if err := scan.ScanTree(module, "/dashboard_data/CO2", &metrics.co2); err != nil {
-		return nil, err
-	}
-	if err := scan.ScanTree(module, "/dashboard_data/Noise", &metrics.noise); err != nil {
-		return nil, err
-	}
-	if err := scan.ScanTree(module, "/dashboard_data/Pressure", &metrics.pressure); err != nil {
-		return nil, err
-	}
-	if err := scan.ScanTree(module, "/module_name", &metrics.moduleName); err != nil {
-		return nil, err
+
+	if moduleName != nil {
+		metrics.moduleName = *moduleName
 	}
 
 	return metrics, nil
