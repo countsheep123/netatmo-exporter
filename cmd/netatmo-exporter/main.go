@@ -317,11 +317,13 @@ func getStationMetrics(data *netatmo.StationData) ([]*metrics, error) {
 		metrics = append(metrics, m)
 
 		for _, module := range device.Modules {
-			m, err := getModuleMetrics(module.DashboardData, device.StationName, module.ModuleName)
-			if err != nil {
-				return nil, err
+			if module.DashboardData != nil {
+				m, err := getModuleMetrics(module.DashboardData, device.StationName, module.ModuleName)
+				if err != nil {
+					return nil, err
+				}
+				metrics = append(metrics, m)
 			}
-			metrics = append(metrics, m)
 		}
 	}
 
