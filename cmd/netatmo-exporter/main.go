@@ -21,8 +21,9 @@ import (
 	"github.com/prometheus/common/version"
 )
 
-var (
+const (
 	namespace = "netatmo"
+	subsystem = ""
 )
 
 var (
@@ -99,6 +100,9 @@ type Collector struct {
 }
 
 func newCollector() *Collector {
+	varLabels := []string{"station", "module"}
+	constLabels := prometheus.Labels{}
+
 	return &Collector{
 		up: prometheus.NewGauge(prometheus.GaugeOpts{
 			Namespace: namespace,
@@ -106,34 +110,34 @@ func newCollector() *Collector {
 			Help:      "up",
 		}),
 		temperature: prometheus.NewDesc(
-			prometheus.BuildFQName(namespace, "", "temperature"),
+			prometheus.BuildFQName(namespace, subsystem, "temperature"),
 			"temperature",
-			[]string{"device"},
-			nil,
+			varLabels,
+			constLabels,
 		),
 		humidity: prometheus.NewDesc(
-			prometheus.BuildFQName(namespace, "", "humidity"),
+			prometheus.BuildFQName(namespace, subsystem, "humidity"),
 			"humidity",
-			[]string{"device"},
-			nil,
+			varLabels,
+			constLabels,
 		),
 		co2: prometheus.NewDesc(
-			prometheus.BuildFQName(namespace, "", "co2"),
+			prometheus.BuildFQName(namespace, subsystem, "co2"),
 			"co2",
-			[]string{"device"},
-			nil,
+			varLabels,
+			constLabels,
 		),
 		noise: prometheus.NewDesc(
-			prometheus.BuildFQName(namespace, "", "noise"),
+			prometheus.BuildFQName(namespace, subsystem, "noise"),
 			"noise",
-			[]string{"device"},
-			nil,
+			varLabels,
+			constLabels,
 		),
 		pressure: prometheus.NewDesc(
-			prometheus.BuildFQName(namespace, "", "pressure"),
+			prometheus.BuildFQName(namespace, subsystem, "pressure"),
 			"pressure",
-			[]string{"device"},
-			nil,
+			varLabels,
+			constLabels,
 		),
 	}
 }
@@ -160,12 +164,14 @@ func (c *Collector) Collect(ch chan<- prometheus.Metric) {
 	ch <- c.up
 
 	for _, m := range metrics {
+		labels := []string{m.stationName, m.moduleName}
+
 		if m.temperature != nil {
 			ch <- prometheus.MustNewConstMetric(
 				c.temperature,
 				prometheus.GaugeValue,
 				*m.temperature,
-				fmt.Sprintf("%s-%s", m.stationName, m.moduleName),
+				labels...,
 			)
 		}
 		if m.humidity != nil {
@@ -173,7 +179,7 @@ func (c *Collector) Collect(ch chan<- prometheus.Metric) {
 				c.humidity,
 				prometheus.GaugeValue,
 				float64(*m.humidity),
-				fmt.Sprintf("%s-%s", m.stationName, m.moduleName),
+				labels...,
 			)
 		}
 		if m.co2 != nil {
@@ -181,7 +187,7 @@ func (c *Collector) Collect(ch chan<- prometheus.Metric) {
 				c.co2,
 				prometheus.GaugeValue,
 				float64(*m.co2),
-				fmt.Sprintf("%s-%s", m.stationName, m.moduleName),
+				labels...,
 			)
 		}
 		if m.noise != nil {
@@ -189,7 +195,7 @@ func (c *Collector) Collect(ch chan<- prometheus.Metric) {
 				c.noise,
 				prometheus.GaugeValue,
 				float64(*m.noise),
-				fmt.Sprintf("%s-%s", m.stationName, m.moduleName),
+				labels...,
 			)
 		}
 		if m.pressure != nil {
@@ -197,7 +203,7 @@ func (c *Collector) Collect(ch chan<- prometheus.Metric) {
 				c.pressure,
 				prometheus.GaugeValue,
 				*m.pressure,
-				fmt.Sprintf("%s-%s", m.stationName, m.moduleName),
+				labels...,
 			)
 		}
 	}
