@@ -15,7 +15,6 @@ import (
 
 	netatmo "github.com/countsheep123/go-netatmo"
 	scan "github.com/mattn/go-scan"
-
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/version"
@@ -91,12 +90,15 @@ func main() {
 }
 
 type Collector struct {
-	up          prometheus.Gauge
-	temperature *prometheus.Desc
-	humidity    *prometheus.Desc
-	co2         *prometheus.Desc
-	noise       *prometheus.Desc
-	pressure    *prometheus.Desc
+	up             prometheus.Gauge
+	temperature    *prometheus.Desc
+	humidity       *prometheus.Desc
+	co2            *prometheus.Desc
+	noise          *prometheus.Desc
+	pressure       *prometheus.Desc
+	wifiStatus     *prometheus.Desc
+	rfStatus       *prometheus.Desc
+	batteryPercent *prometheus.Desc
 }
 
 func newCollector() *Collector {
@@ -139,6 +141,24 @@ func newCollector() *Collector {
 			varLabels,
 			constLabels,
 		),
+		wifiStatus: prometheus.NewDesc(
+			prometheus.BuildFQName(namespace, subsystem, "wifi_status"),
+			"wifi_status",
+			varLabels,
+			constLabels,
+		),
+		rfStatus: prometheus.NewDesc(
+			prometheus.BuildFQName(namespace, subsystem, "rf_status"),
+			"rf_status",
+			varLabels,
+			constLabels,
+		),
+		batteryPercent: prometheus.NewDesc(
+			prometheus.BuildFQName(namespace, subsystem, "battery_percent"),
+			"battery_percent",
+			varLabels,
+			constLabels,
+		),
 	}
 }
 
@@ -149,6 +169,9 @@ func (c *Collector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.co2
 	ch <- c.noise
 	ch <- c.pressure
+	ch <- c.wifiStatus
+	ch <- c.rfStatus
+	ch <- c.batteryPercent
 }
 
 func (c *Collector) Collect(ch chan<- prometheus.Metric) {
@@ -206,15 +229,42 @@ func (c *Collector) Collect(ch chan<- prometheus.Metric) {
 				labels...,
 			)
 		}
+		if m.wifiStatus != nil {
+			ch <- prometheus.MustNewConstMetric(
+				c.wifiStatus,
+				prometheus.GaugeValue,
+				float64(*m.wifiStatus),
+				labels...,
+			)
+		}
+		if m.rfStatus != nil {
+			ch <- prometheus.MustNewConstMetric(
+				c.rfStatus,
+				prometheus.GaugeValue,
+				float64(*m.rfStatus),
+				labels...,
+			)
+		}
+		if m.batteryPercent != nil {
+			ch <- prometheus.MustNewConstMetric(
+				c.batteryPercent,
+				prometheus.GaugeValue,
+				float64(*m.batteryPercent),
+				labels...,
+			)
+		}
 	}
 }
 
 type metrics struct {
-	temperature *float64
-	humidity    *int64
-	co2         *int64
-	noise       *int64
-	pressure    *float64
+	temperature    *float64
+	humidity       *int64
+	co2            *int64
+	noise          *int64
+	pressure       *float64
+	wifiStatus     *int64
+	rfStatus       *int64
+	batteryPercent *int64
 
 	stationName string
 	moduleName  string
@@ -320,6 +370,7 @@ func getStationMetrics(data *netatmo.StationData) ([]*metrics, error) {
 		if err != nil {
 			return nil, err
 		}
+		m.wifiStatus = device.WifiStatus
 		metrics = append(metrics, m)
 
 		for _, module := range device.Modules {
@@ -328,6 +379,8 @@ func getStationMetrics(data *netatmo.StationData) ([]*metrics, error) {
 				if err != nil {
 					return nil, err
 				}
+				m.rfStatus = module.RfStatus
+				m.batteryPercent = module.BatteryPercent
 				metrics = append(metrics, m)
 			}
 		}
