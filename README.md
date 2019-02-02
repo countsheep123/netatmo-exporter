@@ -6,6 +6,10 @@
 go get -u gitlab.com/countsheep123/netatmo-exporter/...
 ```
 
+```
+docker pull countsheep123/netatmo-exporter
+```
+
 ## environment
 
 * LISTEN_ADDR
