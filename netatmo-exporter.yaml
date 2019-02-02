@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
       - name: netatmo-exporter
-        image: registry.gitlab.com/countsheep123/netatmo-exporter:latest
+        image: countsheep123/netatmo-exporter:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 18080
