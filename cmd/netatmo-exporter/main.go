@@ -366,12 +366,14 @@ func getStationMetrics(data *netatmo.StationData) ([]*metrics, error) {
 	metrics := []*metrics{}
 
 	for _, device := range data.Body.Devices {
-		m, err := getModuleMetrics(device.DashboardData, device.StationName, device.ModuleName)
-		if err != nil {
-			return nil, err
+		if device.DashboardData != nil {
+			m, err := getModuleMetrics(device.DashboardData, device.StationName, device.ModuleName)
+			if err != nil {
+				return nil, err
+			}
+			m.wifiStatus = device.WifiStatus
+			metrics = append(metrics, m)
 		}
-		m.wifiStatus = device.WifiStatus
-		metrics = append(metrics, m)
 
 		for _, module := range device.Modules {
 			if module.DashboardData != nil {
